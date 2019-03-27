@@ -1,0 +1,30 @@
+# Definition of all trackable objects (rigid bodies) and their respective
+# pose topics and TF frame name (child_frame_id).
+#
+# The marker ID corresponds to the *User Data* field in the Motive
+#  configuration.
+
+rigid_bodies:
+    '1':
+        pose: optitrack/robot/pose
+        pose2d: optitrack/robot/ground_pose
+        child_frame_id: optitrack/robot/base_link
+        parent_frame_id: world
+    '2':
+        pose: optitrack/p1/pose
+        pose2d: optitrack/p1/ground_pose
+        child_frame_id: optitrack/p1/base_link
+        parent_frame_id: world
+    '3':
+        pose: optitrack/p2/pose
+        pose2d: optitrack/p2/ground_pose
+        child_frame_id: optitrack/p2/base_link
+        parent_frame_id: world
+    '4':
+        pose: optitrack/p3/pose
+        pose2d: optitrack/p3/ground_pose
+        child_frame_id: optitrack/p3/base_link
+        parent_frame_id: world
+# Configuration options at EPFL
+optitrack_config:
+        multicast_address: 239.255.42.99

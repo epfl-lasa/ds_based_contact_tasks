@@ -1,0 +1,28 @@
+- git:
+    local-name: kuka-lwr-ros
+    uri: https://github.com/epfl-lasa/kuka-lwr-ros.git
+    version: dev_controllers
+
+- git:
+    local-name: SVMGrad
+    uri: https://github.com/nbfigueroa/SVMGrad.git
+
+- git:
+    local-name: sg_differentiation
+    uri: https://github.com/epfl-lasa/sg_differentiation.git
+
+- git:
+    local-name: utils
+    uri: https://github.com/walidAmanhoud/utils
+
+- git:
+    local-name: mocap_optitrack
+    uri: https://github.com/epfl-lasa/mocap_optitrack.git
+
+- git:
+    local-name: net-ft-sensor
+    uri: https://github.com/epfl-lasa/net-ft-ros.git
+
+- git:
+    local-name: libsvm
+    uri: https://github.com/cjlin1/libsvm.git
