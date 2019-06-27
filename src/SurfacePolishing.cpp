@@ -13,14 +13,27 @@ SurfacePolishing::SurfacePolishing(ros::NodeHandle &n, double frequency, std::st
   _surfaceType(surfaceType),
   _targetVelocity(targetVelocity),
   _targetForce(targetForce),
-  _adaptNormalModulation(adaptNormalModulation)
+  _adaptNormalModulation(adaptNormalModulation),
+  _rbfAdaptation(10, 1, 0.014, 10.0f*_dt, 10.0f*_dt, 0.07f, -0.07f,0.0f,0.0f),
+  _rbfAdaptation2(10, 0.014, 0.14, 10.0f*_dt)
 {
   me = this;
 
   _gravity << 0.0f, 0.0f, -9.80665f;
-  _toolComPositionFromSensor << 0.0f,0.0f,0.02f;
-  _toolOffsetFromEE = 0.15f;
-  _toolMass = 0.07f;
+  // _toolComPositionFromSensor << 0.0f,0.0f,0.02f;
+  // _toolOffsetFromEE = 0.15f;
+  // _toolMass = 0.07f;
+  // _toolOffsetFromEE = 0.255f;
+  // _toolMass = 0.02f;
+  // _toolComPositionFromSensor << 0.0f,0.0f,0.04f;
+  // _toolOffsetFromEE = 0.16f;
+  // _toolMass = 0.03f;
+
+
+  _toolComPositionFromSensor<< 0.0f,0.0f,0.035f;
+  _toolOffsetFromEE= 0.14f;
+  _toolMass= 0.1f;
+
 
   _x.setConstant(0.0f);
   _q.setConstant(0.0f);
@@ -49,7 +62,9 @@ SurfacePolishing::SurfacePolishing(ros::NodeHandle &n, double frequency, std::st
   _qd.setConstant(0.0f);
 
   _n << 0.0f, 0.0f, -1.0f;
-  _polishingAttractor << -0.6f, 0.1f, 0.4f;
+  // _polishingAttractor << -0.6f, 0.0f, 0.05f;
+  // _polishingAttractor << -0.6f, 0.0f, 0.09f;
+  _polishingAttractor << -0.6f, 0.0f, 0.08f;
   _planeNormal << 0.0f, 0.0f, 1.0f;
   _normalDistanceTolerance = 0.05f;
   _normalForceTolerance = 3.0f;
@@ -77,12 +92,18 @@ SurfacePolishing::SurfacePolishing(ros::NodeHandle &n, double frequency, std::st
   _optitrackOK = false;
   _wrenchBiasOK = false;
   _stop = false;
+  _useOptitrack = false;
 
   _markersPosition.setConstant(0.0f);
   _markersPosition0.setConstant(0.0f);
   _markersSequenceID.setConstant(0);
   _markersTracked.setConstant(0);
+  _p1 = _polishingAttractor;
+  _p2 = _polishingAttractor;
+  _p3 = _polishingAttractor;
   _optitrackCount = 0;
+
+  _nbContact = 0;
 
   _msgSurfaceMarker.header.frame_id = "world";
   _msgSurfaceMarker.header.stamp = ros::Time();
@@ -172,10 +193,10 @@ bool SurfacePolishing::init()
   _subRobotPose = _nh.subscribe("/lwr/ee_pose", 1, &SurfacePolishing::updateRobotPose, this, ros::TransportHints().reliable().tcpNoDelay());
   _subRobotTwist = _nh.subscribe("/lwr/joint_controllers/twist", 1, &SurfacePolishing::updateRobotTwist, this, ros::TransportHints().reliable().tcpNoDelay());
   _subForceTorqueSensor = _nh.subscribe("/ft_sensor/netft_data", 1, &SurfacePolishing::updateRobotWrench, this, ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[ROBOT_BASIS] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/robot/pose", 1, boost::bind(&SurfacePolishing::updateOptitrackPose,this,_1,ROBOT_BASIS),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[P1] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/p1/pose", 1, boost::bind(&SurfacePolishing::updateOptitrackPose,this,_1,P1),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[P2] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/p2/pose", 1, boost::bind(&SurfacePolishing::updateOptitrackPose,this,_1,P2),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[P3] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/p3/pose", 1, boost::bind(&SurfacePolishing::updateOptitrackPose,this,_1,P3),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[ROBOT_BASIS] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/robot/pose", 1, boost::bind(&SurfacePolishing::updateOptitrackPose,this,_1,ROBOT_BASIS),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[P1] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/p1/pose", 1, boost::bind(&SurfacePolishing::updateOptitrackPose,this,_1,P1),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[P2] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/p2/pose", 1, boost::bind(&SurfacePolishing::updateOptitrackPose,this,_1,P2),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[P3] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/p3/pose", 1, boost::bind(&SurfacePolishing::updateOptitrackPose,this,_1,P3),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
   _subDampingMatrix = _nh.subscribe("/lwr/joint_controllers/passive_ds_damping_matrix", 1, &SurfacePolishing::updateDampingMatrix,this,ros::TransportHints().reliable().tcpNoDelay());
 
   // Publisher definitions
@@ -256,6 +277,12 @@ bool SurfacePolishing::init()
     return false;
   }
 
+  if(!_useOptitrack)
+  {
+    _surfaceType = PLANAR;
+    _optitrackOK = true;
+  }
+
   if (_nh.ok()) 
   { 
     // Wait for poses being published
@@ -275,11 +302,10 @@ void SurfacePolishing::run()
 {
   _timeInit = ros::Time::now().toSec();
 
-  while (!_stop && ros::Time::now().toSec()-_timeInit < _duration) 
+  // while (!_stop && ros::Time::now().toSec()-_timeInit < _duration) 
+  while (!_stop) 
   {
-    if(_firstRobotPose && _firstRobotTwist && _wrenchBiasOK &&
-       _firstOptitrackPose[ROBOT_BASIS] && _firstOptitrackPose[P1] &&
-       _firstOptitrackPose[P2] && _firstOptitrackPose[P3] && _firstDampingMatrix)
+    if(allSubscribersOK())
     {
       _mutex.lock();
 
@@ -325,6 +351,34 @@ void SurfacePolishing::run()
   ros::spinOnce();
   _loopRate.sleep();
 
+  // _outputFile.close();
+  // _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
+  //                 "_"+std::to_string(_rbfAdaptation.get_epsilon())+"_weights.txt");
+  // _outputFile << _rbfAdaptation.get_weights();
+  // _outputFile.close();
+  // _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
+  //                  "_"+std::to_string(_rbfAdaptation.get_epsilon())+"_centers.txt");
+  // _outputFile << _rbfAdaptation.get_centers();
+  // _outputFile.close();
+  // _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
+  //                 "_"+std::to_string(_rbfAdaptation.get_epsilon())+"_sigmas.txt");
+  // _outputFile << _rbfAdaptation.get_sigma();
+  // _outputFile.close();
+
+  _outputFile.close();
+  _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
+                  "_"+std::to_string(_rbfAdaptation2.getAdaptationRate())+"_weights.txt");
+  _outputFile << _rbfAdaptation2.getWeights();
+  _outputFile.close();
+  _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
+                   "_"+std::to_string(_rbfAdaptation2.getAdaptationRate())+"_centers.txt");
+  _outputFile << _rbfAdaptation2.getCenters();
+  _outputFile.close();
+  _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
+                  "_"+std::to_string(_rbfAdaptation2.getAdaptationRate())+"_sigmas.txt");
+  _outputFile << _rbfAdaptation2.getWidths();
+  _outputFile.close();
+
   ros::shutdown();
 }
 
@@ -332,6 +386,21 @@ void SurfacePolishing::run()
 void SurfacePolishing::stopNode(int sig)
 {
   me->_stop = true;
+}
+
+
+bool SurfacePolishing::allSubscribersOK()
+{
+  if(!_useOptitrack)
+  {
+    return _firstRobotPose && _firstRobotTwist && _wrenchBiasOK && _firstDampingMatrix;     
+  }
+  else
+  {
+    return _firstRobotPose && _firstRobotTwist && _wrenchBiasOK &&
+    _firstOptitrackPose[ROBOT_BASIS] && _firstOptitrackPose[P1] &&
+    _firstOptitrackPose[P2] && _firstOptitrackPose[P3] && _firstDampingMatrix;     
+  }
 }
 
 
@@ -372,25 +441,35 @@ void SurfacePolishing::updateSurfaceInformation()
       // |       
       // |
       // P3
-      _p1 = _markersPosition.col(P1)-_markersPosition0.col(ROBOT_BASIS);
-      _p2 = _markersPosition.col(P2)-_markersPosition0.col(ROBOT_BASIS);
-      _p3 = _markersPosition.col(P3)-_markersPosition0.col(ROBOT_BASIS);
-      Eigen::Vector3f p13,p12;
+      if(_useOptitrack)
+      {      
+        _p1 = _markersPosition.col(P1)-_markersPosition0.col(ROBOT_BASIS);
+        _p2 = _markersPosition.col(P2)-_markersPosition0.col(ROBOT_BASIS);
+        _p3 = _markersPosition.col(P3)-_markersPosition0.col(ROBOT_BASIS);
 
-      // Compute main directions between the markers  
-      p13 = _p3-_p1;
-      p12 = _p2-_p1;
-      p13 /= p13.norm();
-      p12 /= p12.norm();
+        _wRs.col(0) = (_p1-_p3).normalized();
+        _wRs.col(1) = (_p1-_p2).normalized();
+        _wRs.col(2) = ((_wRs.col(0)).cross(_wRs.col(1))).normalized();
+        Eigen::Vector3f p13,p12;
 
-      // Compute normal vector 
-      _planeNormal = p13.cross(p12);
-      _planeNormal /= _planeNormal.norm();
-  
+        // Compute main directions between the markers  
+        p13 = _p3-_p1;
+        p12 = _p2-_p1;
+        p13 /= p13.norm();
+        p12 /= p12.norm();
+
+        // Compute normal vector 
+        _planeNormal = p13.cross(p12);
+        _planeNormal /= _planeNormal.norm();
+      }
+      else
+      {
+        _planeNormal << 0.0f, 0.0f, 1.0f;    
+        _wRs.setIdentity();
+      }
       // Compute vertical projection onto the surface
       _xProj = _x;
       _xProj(2) = (-_planeNormal(0)*(_xProj(0)-_p3(0))-_planeNormal(1)*(_xProj(1)-_p3(1))+_planeNormal(2)*_p3(2))/_planeNormal(2);
-      
       // Compute _n = normal vector pointing towards the surface
       _n = -_planeNormal;
       
@@ -490,8 +569,53 @@ void SurfacePolishing::updateContactState()
     _normalForceAverage /= MOVING_FORCE_WINDOW_SIZE;
   }
 
+  // if(_contactState!=CONTACT)
+  // {
+  //   if(_x(1)>0.15f)
+  //   {
+  //     _polishingAttractor << -0.6f, 0.3f, 0.06f;
+  //     _targetForce = 10.0f;
+  //   }
+  //   else if(_x(1)<-0.15f)
+  //   {
+  //     _polishingAttractor << -0.6f, -0.3f, 0.06f;
+  //     _targetForce = 15.0f;
+  //   }
+  //   else
+  //   {
+  //     _polishingAttractor << -0.6f, 0.0f, 0.06f;
+  //     _targetForce = 20.0f;
+
+  //   }
+    // _polishingAttractor = _x;
+    // _polishingAttractor(1)+=0.05f;
+  // }
+  // if(_x(1)-_polishingAttractor(1)>0.6)
+  // {
+  //   _targetForce = 20
+  // }
+
   if(_normalForceAverage >= _normalForceTolerance && _normalDistance < _normalDistanceTolerance)
   {
+    if(_contactState!=CONTACT)
+    {
+      // if(_nbContact%3==0)
+      // {
+      //   _targetForce = 10.0f;
+      // }
+      // else if(_nbContact%3==1)
+      // {
+      //   _targetForce = 15.0f;
+      // }
+      // else
+      // {
+      //   _targetForce = 20.0f;
+      // }
+      // _nbContact++;
+
+      // _polishingAttractor = _x;
+      // _polishingAttractor(1)+=0.05f;
+    }
     _contactState = CONTACT;
     _c = 1.0f;
   }
@@ -513,7 +637,10 @@ void SurfacePolishing::computeNominalDS()
   // Compute fixed attractor on plane
   if(_surfaceType == PLANAR)
   {
-    _polishingAttractor = _p1+0.45f*(_p2-_p1)+0.5f*(_p3-_p1);
+    if(_useOptitrack)
+    {
+      _polishingAttractor = _p1+0.45f*(_p2-_p1)+0.5f*(_p3-_p1);
+    }
   }
   else 
   {
@@ -537,13 +664,14 @@ void SurfacePolishing::computeNominalDS()
  
   // Compute normalized circular dynamics projected onto the surface
   Eigen::Vector3f vdContact;
+
   vdContact = (Eigen::Matrix3f::Identity()-_n*_n.transpose())*polishingDS(_x,_polishingAttractor);
   vdContact.normalize();
 
   // Compute rotation angle + axis between reaching velocity vector and circular dynamics
   float angle = std::acos(v0.normalized().dot(vdContact));
   float theta;
-  if(_c>FLT_EPSILON)
+  if(_contactState==CONTACT)
   {
     theta = angle;
   }
@@ -602,16 +730,35 @@ void SurfacePolishing::computeModulationTerms()
   }
   else
   {
-    float ddeltaF = _epsilonF*(_c*(_Fd-_normalForce))-_epsilonF0*(1-_c)*_deltaF;
-    _deltaF += _dt*ddeltaF;
-    if(_deltaF > _gammaF*_Fd)
+    // float ddeltaF = _epsilonF*(_c*(_Fd-_normalForce))-_epsilonF0*(1-_c)*_deltaF;
+    // _deltaF += _dt*ddeltaF;
+    // if(_deltaF > _gammaF*_Fd)
+    // {
+    //   _deltaF = _gammaF*_Fd;
+    // }
+    // else if(_deltaF < -_gammaF*_Fd)
+    // {
+    //   _deltaF = -_gammaF*_Fd;
+    // }
+
+    Eigen::Vector3f xs = _wRs.transpose()*(_x-_polishingAttractor);
+    xs(2) = 0.0f;
+    // _deltaF = _c*_rbfAdaptation.update(-(_Fd-_normalForce),_x(0),_x(1));
+    std::cerr << "xs: " << xs.transpose() << std::endl;
+    if(_contactState==CONTACT)
     {
-      _deltaF = _gammaF*_Fd;
+      // _deltaF = _rbfAdaptation.update(-(_Fd-_normalForce),xs(0),xs(1));
+      _deltaF = _rbfAdaptation2.update(-(_Fd-_normalForce),xs);
+      _deltaF = (_deltaF>10.0f) ? 10.0f : _deltaF;
+      _deltaF = (_deltaF<-10.0f) ? -10.0f : _deltaF;
     }
-    else if(_deltaF < -_gammaF*_Fd)
-    {
-      _deltaF = -_gammaF*_Fd;
-    }
+
+    // if(_deltaF> 4.0f)
+    // {
+    //   _deltaF = 4.0f;
+    // }
+    // else if(_deltaF < -4.0f)
+    // _fxn = (_Fd/_d1)*_n;
 
     _fxn = ((_Fd+_c*_deltaF)/_d1)*_n;
   }
@@ -705,8 +852,10 @@ void SurfacePolishing::computeModulatedDS()
   updateTankScalars();
 
   // Compute corrected nominal DS and modulation terms
-  _fxp = _fxc+_betarp*_fxr;
-  _fxnp = _betanp*_fxn;
+  // _fxp = _fxc+_betarp*_fxr;
+  // _fxnp = _betanp*_fxn;
+  _fxp = _fxc+_fxr;
+  _fxnp = _fxn;
 
   // Update tank dynamics
   _pd = _v.transpose()*_D*_v;
@@ -821,7 +970,11 @@ void SurfacePolishing::logData()
               << _betarp << " "
               << _betan << " "
               << _betanp << " "
-              << _dW << " " << std::endl;
+              << _dW << " "
+              << _rbfAdaptation.get_epsilon() << " "
+              << (_markersPosition.col(P2)-_markersPosition.col(ROBOT_BASIS)).transpose() << " "
+              << (_markersPosition.col(P3)-_markersPosition.col(ROBOT_BASIS)).transpose() << " "
+              << _polishingAttractor.transpose() <<std::endl;
 }
 
 
@@ -959,6 +1112,12 @@ void SurfacePolishing::updateRobotWrench(const geometry_msgs::WrenchStamped::Con
   raw(4) = msg->wrench.torque.y;
   raw(5) = msg->wrench.torque.z;
 
+  Eigen::Matrix3f temp;
+  // temp << 0.0f, -1.0f, 0.0f,
+  //         1.0f, 0.0f, 0.0f,
+  //         0.0f, 0.0f, 1.0f;
+  // raw.segment(0,3) = temp*raw.segment(0,3); 
+  // raw.segment(3,3) = temp*raw.segment(3,3); 
   if(!_wrenchBiasOK && _firstRobotPose)
   {
     Eigen::Vector3f loadForce = _wRb.transpose()*_toolMass*_gravity;
@@ -1064,4 +1223,8 @@ void SurfacePolishing::dynamicReconfigureCallback(ds_based_contact_tasks::surfac
   _offset(0) = config.xOffset;
   _offset(1) = config.yOffset;
   _offset(2) = config.zOffset;
+  _rbfAdaptation.set_epsilon(config.adaptationRateWeights*_dt);
+  //_rbfAdaptation.set_sigma(config.sigma);
+  _rbfAdaptation.set_epsilon_sigma(config.adaptationRateSigmas*_dt);
+  _rbfAdaptation2.setAdaptationRate(config.adaptationRateWeights*_dt);
 }

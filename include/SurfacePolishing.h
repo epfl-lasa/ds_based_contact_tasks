@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <vector>
 #include <deque>
+#include <sstream>
 #include "ros/ros.h"
 #include <ros/package.h>
 #include "geometry_msgs/Pose.h"
@@ -24,6 +25,9 @@
 #include "ds_based_contact_tasks/surfacePolishing_paramsConfig.h"
 #include "Eigen/Eigen"
 #include "svm_grad.h"
+#include "adaptation_rbf.hpp"
+#include "RbfAdaptation.hpp"
+
 
 #define NB_FT_SAMPLES 50      			 // Number of force torque sensors' samples used for initial calibration (compute the offsets)
 #define NB_OPTITRACK_SAMPLES 100     // Number of optitrack samples used for initial objects' pose estimation
@@ -186,6 +190,7 @@ class SurfacePolishing
 		bool _stop;																		// Check for CTRL+C
 		bool _adaptTangentialModulation;							// Define if we adapt the tangential modulation term to the surface online
 		bool _adaptNormalModulation;									// Define if we adapt the normal modualtion term to the surface online
+		bool _useOptitrack;									// Define if we adapt the normal modualtion term to the surface online
 
 		/////////////////////////
     // Optitrack variables //
@@ -210,6 +215,7 @@ class SurfacePolishing
 		/////////////////////
 		// Other variables //
 		/////////////////////
+    uint32_t _nbContact;
     double _timeInit;
   	float _Fds;
 		std::string _fileName;  			// Filename used to log data
@@ -223,6 +229,10 @@ class SurfacePolishing
 		// Dynamic reconfigure (server+callback)
 		dynamic_reconfigure::Server<ds_based_contact_tasks::surfacePolishing_paramsConfig> _dynRecServer;
 		dynamic_reconfigure::Server<ds_based_contact_tasks::surfacePolishing_paramsConfig>::CallbackType _dynRecCallback;
+
+
+		Rbf_parameter _rbfAdaptation;
+		RbfAdaptation _rbfAdaptation2;
 
 
 	public:
@@ -243,6 +253,8 @@ class SurfacePolishing
 
 		// Callback called when CTRL is detected to stop the node
 		static void stopNode(int sig);
+
+		bool allSubscribersOK();
 
 		// Compute command to be sent to the DS-impedance controller
     void computeCommand();

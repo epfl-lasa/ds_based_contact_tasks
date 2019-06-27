@@ -47,7 +47,7 @@ add_executable(surface_learning src/surfaceLearning_node.cpp src/SurfaceLearning
 target_link_libraries(surface_learning ${catkin_LIBRARIES})
 add_dependencies(surface_learning ${PROJECT_NAME}_gencpp)
 
-add_executable(surface_polishing src/surfacePolishing_node.cpp src/SurfacePolishing.cpp)
+add_executable(surface_polishing src/surfacePolishing_node.cpp src/SurfacePolishing.cpp src/adaptation_rbf.cpp src/RbfAdaptation.cpp)
 target_link_libraries(surface_polishing ${catkin_LIBRARIES})
 add_dependencies(surface_polishing ${PROJECT_NAME}_gencpp)
 

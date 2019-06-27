@@ -23,9 +23,9 @@ SurfaceLearning::SurfaceLearning(ros::NodeHandle &n, double frequency, std::stri
   // _toolComPositionFromSensor << 0.0f,0.0f,0.02f;
   // _toolOffsetFromEE = 0.15f;
   // _toolMass = 0.1f;
-  _toolComPositionFromSensor << 0.0f,0.0f,0.08f;
-  _toolOffsetFromEE = 0.265f;
-  _toolMass = 0.630f;
+  _toolComPositionFromSensor << 0.0f,0.0f,0.04f;
+  _toolOffsetFromEE = 0.16f;
+  _toolMass = 0.03f;
 
   _x.setConstant(0.0f);
   _q.setConstant(0.0f);
@@ -53,11 +53,11 @@ SurfaceLearning::SurfaceLearning(ros::NodeHandle &n, double frequency, std::stri
   _firstWrenchReceived = false;
   for(int k = 0; k < NB_TRACKED_OBJECT; k++)
   {
-    _firstOptitrackPose[k] = true;
+    _firstOptitrackPose[k] = false;
   }
   _wrenchBiasOK = false;
   _stop = false;
-  _optitrackOK = true;
+  _optitrackOK = false;
 
   _markersPosition.setConstant(0.0f);
   _markersPosition0.setConstant(0.0f);
@@ -98,10 +98,10 @@ bool SurfaceLearning::init()
   _subRobotPose = _nh.subscribe("/lwr/ee_pose", 1, &SurfaceLearning::updateRobotPose, this, ros::TransportHints().reliable().tcpNoDelay());
   _subRobotTwist = _nh.subscribe("/lwr/ee_vel", 1, &SurfaceLearning::updateRobotTwist, this, ros::TransportHints().reliable().tcpNoDelay());
   _subForceTorqueSensor = _nh.subscribe("/ft_sensor/netft_data", 1, &SurfaceLearning::updateRobotWrench, this, ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[ROBOT_BASIS] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/robot/pose", 1, boost::bind(&SurfaceLearning::updateOptitrackPose,this,_1,ROBOT_BASIS),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[P1] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/p1/pose", 1, boost::bind(&SurfaceLearning::updateOptitrackPose,this,_1,P1),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[P2] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/p2/pose", 1, boost::bind(&SurfaceLearning::updateOptitrackPose,this,_1,P2),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[P3] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/p3/pose", 1, boost::bind(&SurfaceLearning::updateOptitrackPose,this,_1,P3),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[ROBOT_BASIS] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/robot/pose", 1, boost::bind(&SurfaceLearning::updateOptitrackPose,this,_1,ROBOT_BASIS),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[P1] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/p1/pose", 1, boost::bind(&SurfaceLearning::updateOptitrackPose,this,_1,P1),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[P2] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/p2/pose", 1, boost::bind(&SurfaceLearning::updateOptitrackPose,this,_1,P2),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[P3] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/p3/pose", 1, boost::bind(&SurfaceLearning::updateOptitrackPose,this,_1,P3),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
   
   // Publisher definitions
   _pubDesiredTwist = _nh.advertise<geometry_msgs::Twist>("/lwr/joint_controllers/passive_ds_command_vel", 1);
@@ -190,8 +190,8 @@ void SurfaceLearning::run()
        _firstOptitrackPose[ROBOT_BASIS] && _firstOptitrackPose[P1] &&
        _firstOptitrackPose[P2] && _firstOptitrackPose[P3])
     {
-      _mutex.lock();
 
+      _mutex.lock();
       // Wait for marker position initialization from optitrack
       if(!_optitrackOK)
       {
@@ -241,8 +241,8 @@ void SurfaceLearning::run()
         // Publish data to topics
         publishData();
 
-        _mutex.unlock();
       }
+        _mutex.unlock();
     }
     ros::spinOnce();
     _loopRate.sleep();
@@ -283,6 +283,7 @@ void SurfaceLearning::updateSurfaceFrame()
   _p1 = _markersPosition.col(P1)-_markersPosition0.col(ROBOT_BASIS);
   _p2 = _markersPosition.col(P2)-_markersPosition0.col(ROBOT_BASIS);
   _p3 = _markersPosition.col(P3)-_markersPosition0.col(ROBOT_BASIS);
+  std::cerr << _p1.transpose() << std::endl;
 
   // Compute surface frame, wRs is the rotation matrix for the surface frame to the world frame  
   _wRs.col(0) = (_p1-_p3).normalized();
