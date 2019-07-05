@@ -15,24 +15,36 @@ SurfacePolishing::SurfacePolishing(ros::NodeHandle &n, double frequency, std::st
   _targetForce(targetForce),
   _adaptNormalModulation(adaptNormalModulation),
   _rbfAdaptation(10, 1, 0.014, 10.0f*_dt, 10.0f*_dt, 0.07f, -0.07f,0.0f,0.0f),
-  _rbfAdaptation2(10, 0.014, 0.14, 10.0f*_dt)
+  // _rbfAdaptation2(10, 0.014, 0.14, 10.0f*_dt),
+  // _rbfAdaptationMotionT(10, 0.014, 0.14, 10.0f*_dt),
+  // _rbfAdaptationMotionTN(10, 0.014, 0.14, 10.0f*_dt),
+  // _rbfAdaptationMotionN(10, 0.014, 0.14, 10.0f*_dt)
+  _rbfAdaptation2(90, 0.01, 0.9, -0.6f, 0.0f, 10.0f*_dt),
+  _rbfAdaptationMotionT(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt),
+  _rbfAdaptationMotionTN(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt),
+  _rbfAdaptationMotionN(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt)
 {
+  _fxm.setConstant(0.0f);
+
+  _adaptMotionModulation = true;
   me = this;
 
   _gravity << 0.0f, 0.0f, -9.80665f;
-  // _toolComPositionFromSensor << 0.0f,0.0f,0.02f;
-  // _toolOffsetFromEE = 0.15f;
-  // _toolMass = 0.07f;
+  
+  // Version big f/t sensor
+  _toolComPositionFromSensor << 0.0f,0.0f,0.02f;
+  _toolOffsetFromEE = 0.155f;
+  _toolMass = 0.08f;
   // _toolOffsetFromEE = 0.255f;
   // _toolMass = 0.02f;
   // _toolComPositionFromSensor << 0.0f,0.0f,0.04f;
   // _toolOffsetFromEE = 0.16f;
   // _toolMass = 0.03f;
 
-
-  _toolComPositionFromSensor<< 0.0f,0.0f,0.035f;
-  _toolOffsetFromEE= 0.14f;
-  _toolMass= 0.1f;
+  // Version small f/t sensor
+  // _toolComPositionFromSensor<< 0.0f,0.0f,0.035f;
+  // _toolOffsetFromEE= 0.14f;
+  // _toolMass= 0.1f;
 
 
   _x.setConstant(0.0f);
@@ -64,7 +76,11 @@ SurfacePolishing::SurfacePolishing(ros::NodeHandle &n, double frequency, std::st
   _n << 0.0f, 0.0f, -1.0f;
   // _polishingAttractor << -0.6f, 0.0f, 0.05f;
   // _polishingAttractor << -0.6f, 0.0f, 0.09f;
-  _polishingAttractor << -0.6f, 0.0f, 0.08f;
+  _polishingAttractor << -0.6f, 0.0f, 0.1f;
+  _sweepingAttractors[0] << -0.6f, 0.0f, 0.2f;
+  _sweepingAttractors[1] << -0.6f, -0.4f, 0.1f;
+  _sweepingAttractors[2] << -0.6f, 0.4f, 0.1f;
+  _attractorID = 0;
   _planeNormal << 0.0f, 0.0f, 1.0f;
   _normalDistanceTolerance = 0.05f;
   _normalForceTolerance = 3.0f;
@@ -413,10 +429,10 @@ void SurfacePolishing::computeCommand()
   updateContactState();
 
   // Compute nominal DS
-  computeNominalDS();
+  computeNominalDS2();
 
   // Compute desired contact force profile
-  computeDesiredContactForceProfile();
+  computeDesiredContactForceProfile2();
 
   // Compute modulation terms
   computeModulationTerms();
@@ -703,6 +719,46 @@ void SurfacePolishing::computeNominalDS()
 }
 
 
+void SurfacePolishing::computeNominalDS2()
+{
+  Eigen::Vector3f fx;
+
+  if((_sweepingAttractors[_attractorID]-_x).norm()<0.03)
+  {
+    _attractorID++;
+    if(_attractorID>2)
+    {
+      _attractorID = 0;
+    }
+  }
+
+  fx = _sweepingAttractors[_attractorID]-_x;
+  fx *= _targetVelocity/fx.norm();
+  std::cerr << _attractorID << " "<< (_sweepingAttractors[_attractorID]-_x).norm() << std::endl;
+
+  if(_attractorID == 2)
+  {
+    _fxc.setConstant(0.0f);
+    if(_contactState == CONTACT)
+    {
+      _fxr = (Eigen::Matrix3f::Identity()-_n*_n.transpose())*fx;
+    }
+    else
+    {
+      _fxr = fx;
+    }
+  }
+  else
+  {
+    _fxc.setConstant(0.0f);
+    _fxr = fx;
+  }
+  std::cerr << _fxr.transpose() << std::endl;
+  // _fxr.setConstant(0.0f);
+  _fx = _fxc+_fxr;
+}
+
+
 void SurfacePolishing::computeDesiredContactForceProfile()
 {
   if(_contactState==CONTACT)
@@ -720,9 +776,63 @@ void SurfacePolishing::computeDesiredContactForceProfile()
   }
 }
 
+void SurfacePolishing::computeDesiredContactForceProfile2()
+{
+  if(_contactState==CONTACT && _attractorID == 2)
+  {
+    _Fd = _targetForce;
+    // _Fd = _Fds;
+  }
+  else if(_contactState==CLOSE_TO_CONTACT && _attractorID == 2)
+  {
+    _Fd = 3.0f;
+  }
+  else
+  {
+    _Fd = 0.0f;
+  }
+}
+
 
 void SurfacePolishing::computeModulationTerms()
 {
+  if(_adaptMotionModulation && _contactState == CONTACT)
+  {
+    float alpha, beta,gamma;
+    Eigen::Vector3f t, tn;
+    t = _fx.normalized();
+    if(t.norm()<FLT_EPSILON)
+    {
+      t.setConstant(0.0f);
+    }
+
+    tn = (_n.cross(t)).normalized();
+
+    if(tn.norm()<FLT_EPSILON)
+    {
+      tn.setConstant(0.0f);
+    }
+
+    // t << 1.0,0.0,0.0f;
+    // tn << 0.0f,1.0f,0.0f;
+
+
+    Eigen::Vector3f xs = _wRs.transpose()*(_x-_polishingAttractor);
+    xs(2) = 0.0f;
+
+    alpha = _rbfAdaptationMotionT.update((_v-_fx).dot(t),xs);
+    beta = _rbfAdaptationMotionTN.update((_v-_fx).dot(tn),xs);
+    gamma = _rbfAdaptationMotionN.update((_v-_fx).dot(_n),xs);
+    // beta = 0.0f;
+    gamma = 0.0f;
+
+    _fxm = alpha*t+beta*tn+gamma*_n;
+    std::cerr << "radius: " << (_x-_polishingAttractor).norm() << " " << (_v-_fx).dot(tn) << " beta: " << beta << std::endl;
+    std::cerr << "v: " << _v.transpose() <<std::endl;
+    std::cerr << "fx: " << _fx.transpose() <<std::endl;
+    std::cerr << "tn: " << tn.transpose() <<std::endl;
+  }
+
 
   if(!_adaptNormalModulation)
   {
@@ -741,14 +851,16 @@ void SurfacePolishing::computeModulationTerms()
     //   _deltaF = -_gammaF*_Fd;
     // }
 
-    Eigen::Vector3f xs = _wRs.transpose()*(_x-_polishingAttractor);
+    // Eigen::Vector3f xs = _wRs.transpose()*(_x-_polishingAttractor);
+    Eigen::Vector3f xs = _wRs.transpose()*(_x);
     xs(2) = 0.0f;
     // _deltaF = _c*_rbfAdaptation.update(-(_Fd-_normalForce),_x(0),_x(1));
     std::cerr << "xs: " << xs.transpose() << std::endl;
-    if(_contactState==CONTACT)
+    if(_contactState==CONTACT && _attractorID == 2)
     {
       // _deltaF = _rbfAdaptation.update(-(_Fd-_normalForce),xs(0),xs(1));
-      _deltaF = _rbfAdaptation2.update(-(_Fd-_normalForce),xs);
+      _deltaF = _rbfAdaptation2.update(Utils<float>::wrapToZero(-(_Fd-_normalForce),-6.0f,6.0f),xs);
+      // _deltaF = _rbfAdaptation2.update(-(_Fd-_normalForce),xs);
       _deltaF = (_deltaF>10.0f) ? 10.0f : _deltaF;
       _deltaF = (_deltaF<-10.0f) ? -10.0f : _deltaF;
     }
@@ -854,7 +966,7 @@ void SurfacePolishing::computeModulatedDS()
   // Compute corrected nominal DS and modulation terms
   // _fxp = _fxc+_betarp*_fxr;
   // _fxnp = _betanp*_fxn;
-  _fxp = _fxc+_fxr;
+  _fxp = _fxc+_fxr+_fxm;
   _fxnp = _fxn;
 
   // Update tank dynamics
@@ -1227,4 +1339,7 @@ void SurfacePolishing::dynamicReconfigureCallback(ds_based_contact_tasks::surfac
   //_rbfAdaptation.set_sigma(config.sigma);
   _rbfAdaptation.set_epsilon_sigma(config.adaptationRateSigmas*_dt);
   _rbfAdaptation2.setAdaptationRate(config.adaptationRateWeights*_dt);
+  _rbfAdaptationMotionT.setAdaptationRate(config.adaptationRateMotion*_dt);
+  _rbfAdaptationMotionTN.setAdaptationRate(config.adaptationRateMotion*_dt);
+  _rbfAdaptationMotionN.setAdaptationRate(config.adaptationRateMotion*_dt);
 }

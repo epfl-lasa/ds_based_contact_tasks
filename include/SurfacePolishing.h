@@ -127,6 +127,7 @@ class SurfacePolishing
 		Eigen::Vector3f _fxc;			// Desired conservative part of the nominal DS [m/s] (3x1)
 		Eigen::Vector3f _fxr;			// Desired non-conservative part of the nominal DS [m/s] (3x1)
 		Eigen::Vector3f _fxn;			// Modulation velocity term along normal direction [m/s] (3x1)
+		Eigen::Vector3f _fxm;			// Modulation velocity term correcting the robot motion [m/s] (3x1)
 		Eigen::Vector3f _fxp;			// Corrected nominal DS to ensure passivity [m/s] (3x1)
 		Eigen::Vector3f _fxnp;		// Corrected modulation term along normal direction to ensure passivity [m/s] (3x1)
 		Eigen::Vector3f _vd;			// Desired modulated DS [m/s] (3x1)
@@ -188,7 +189,7 @@ class SurfacePolishing
 		bool _optitrackOK;														// Check if all markers position is received
 		bool _wrenchBiasOK;														// Check if computation of force/torque sensor bias is OK
 		bool _stop;																		// Check for CTRL+C
-		bool _adaptTangentialModulation;							// Define if we adapt the tangential modulation term to the surface online
+		bool _adaptMotionModulation;							// Define if we adapt the tangential modulation term to the surface online
 		bool _adaptNormalModulation;									// Define if we adapt the normal modualtion term to the surface online
 		bool _useOptitrack;									// Define if we adapt the normal modualtion term to the surface online
 
@@ -233,7 +234,11 @@ class SurfacePolishing
 
 		Rbf_parameter _rbfAdaptation;
 		RbfAdaptation _rbfAdaptation2;
-
+		Eigen::Vector3f _sweepingAttractors[3];
+		int _attractorID;
+		RbfAdaptation _rbfAdaptationMotionT;
+		RbfAdaptation _rbfAdaptationMotionTN;
+		RbfAdaptation _rbfAdaptationMotionN;
 
 	public:
 
@@ -271,8 +276,13 @@ class SurfacePolishing
 		// Compute nominal DS
 		void computeNominalDS();
 
+		void computeNominalDS2();
+
 		// Compute desired contact force profile
 		void computeDesiredContactForceProfile();
+		
+		void computeDesiredContactForceProfile2();
+
 
 		// Compute modulation terms along tangential and normal direction to the surface
 		void computeModulationTerms();

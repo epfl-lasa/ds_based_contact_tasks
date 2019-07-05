@@ -16,7 +16,7 @@ class RbfAdaptation
     Eigen::MatrixXf _centers;
  
   public:
-    RbfAdaptation(int nbGaussiansPerRowColumn, float kernelWidth, float gridWidth, float adaptationRate);
+    RbfAdaptation(int nbGaussiansPerRowColumn, float kernelWidth, float gridWidth, float gridXOffset, float gridYOffset, float adaptationRate);
 
     float update(float error, Eigen::Vector3f x);
 

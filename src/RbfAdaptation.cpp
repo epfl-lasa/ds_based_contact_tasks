@@ -6,7 +6,7 @@
 #include "RbfAdaptation.hpp"
 
 
-RbfAdaptation::RbfAdaptation(int nbGaussiansPerRowColumn, float kernelWidth, float gridWidth, float adaptationRate):
+RbfAdaptation::RbfAdaptation(int nbGaussiansPerRowColumn, float kernelWidth, float gridWidth, float gridXOffset, float gridYOffset, float adaptationRate):
 _nbGaussians(nbGaussiansPerRowColumn*nbGaussiansPerRowColumn),
 _kernelWidth(kernelWidth),
 _gridWidth(gridWidth),
@@ -26,8 +26,8 @@ _adaptationRate(adaptationRate)
   {
     for(int m = 0; m < nbGaussiansPerRowColumn; m++)
     {
-      _centers(id,0) = temp(k);
-      _centers(id,1) = temp(m);
+      _centers(id,0) = temp(k)+gridXOffset;
+      _centers(id,1) = temp(m)+gridYOffset;
       id++;
     }
   }
