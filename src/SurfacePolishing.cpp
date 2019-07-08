@@ -19,10 +19,14 @@ SurfacePolishing::SurfacePolishing(ros::NodeHandle &n, double frequency, std::st
   // _rbfAdaptationMotionT(10, 0.014, 0.14, 10.0f*_dt),
   // _rbfAdaptationMotionTN(10, 0.014, 0.14, 10.0f*_dt),
   // _rbfAdaptationMotionN(10, 0.014, 0.14, 10.0f*_dt)
-  _rbfAdaptation2(90, 0.01, 0.9, -0.6f, 0.0f, 10.0f*_dt),
-  _rbfAdaptationMotionT(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt),
-  _rbfAdaptationMotionTN(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt),
-  _rbfAdaptationMotionN(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt)
+  // _rbfAdaptation2(90, 0.01, 0.9, -0.6f, 0.0f, 10.0f*_dt),
+  // _rbfAdaptationMotionT(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt),
+  // _rbfAdaptationMotionTN(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt),
+  // _rbfAdaptationMotionN(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt)
+  _rbfAdaptation2(Eigen::Vector2i(90,90), Eigen::Vector2f(0.9,0.9), Eigen::Vector2f(-0.6f,0.0f), 0.01, 10.0f*_dt),
+  _rbfAdaptationMotionT(Eigen::Vector2i(10,10), Eigen::Vector2f(0.6,0.6), Eigen::Vector2f(-0.6f,0.0f), 0.06, 10.0f*_dt),
+  _rbfAdaptationMotionTN(Eigen::Vector2i(10,10), Eigen::Vector2f(0.6,0.6), Eigen::Vector2f(-0.6f,0.0f), 0.06, 10.0f*_dt),
+  _rbfAdaptationMotionN(Eigen::Vector2i(10,10), Eigen::Vector2f(0.6,0.6), Eigen::Vector2f(-0.6f,0.0f), 0.06, 10.0f*_dt)
 {
   _fxm.setConstant(0.0f);
 
@@ -246,6 +250,15 @@ bool SurfacePolishing::init()
     return false;
   }
 
+  _outputFile2.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
+                  "_"+std::to_string(_rbfAdaptation2.getAdaptationRate())+"_weights.txt");
+
+  if(!_outputFile2.is_open())
+  {
+    ROS_ERROR("[SurfacePolishing]: Cannot open data file for rbf weights, the data_polishing directory might be missing");
+    return false;
+  }
+
   if(_surfaceType == PLANAR)
   {
     ROS_INFO("[SurfacePolishing]: Surface type: PLANAR");
@@ -382,10 +395,11 @@ void SurfacePolishing::run()
   // _outputFile.close();
 
   _outputFile.close();
-  _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
-                  "_"+std::to_string(_rbfAdaptation2.getAdaptationRate())+"_weights.txt");
-  _outputFile << _rbfAdaptation2.getWeights();
-  _outputFile.close();
+  _outputFile2.close();
+  // _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
+  //                 "_"+std::to_string(_rbfAdaptation2.getAdaptationRate())+"_weights.txt");
+  // _outputFile << _rbfAdaptation2.getWeights();
+  // _outputFile.close();
   _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
                    "_"+std::to_string(_rbfAdaptation2.getAdaptationRate())+"_centers.txt");
   _outputFile << _rbfAdaptation2.getCenters();
@@ -1087,6 +1101,8 @@ void SurfacePolishing::logData()
               << (_markersPosition.col(P2)-_markersPosition.col(ROBOT_BASIS)).transpose() << " "
               << (_markersPosition.col(P3)-_markersPosition.col(ROBOT_BASIS)).transpose() << " "
               << _polishingAttractor.transpose() <<std::endl;
+
+  _outputFile2 << _rbfAdaptation2.getWeights().transpose() << std::endl;
 }
 
 

@@ -222,6 +222,7 @@ class SurfacePolishing
 		std::string _fileName;  			// Filename used to log data
 		std::ifstream _inputFile;  		// Input stream object to read a text file
 		std::ofstream _outputFile;  	// Output stream object to right to a text file
+		std::ofstream _outputFile2;  	// Output stream object to right to a text file
 		std::mutex _mutex;  					// Mutex variable
 		static SurfacePolishing* me;  // Pointer on the instance of the class
 

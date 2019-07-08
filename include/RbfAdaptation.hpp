@@ -5,10 +5,14 @@
 
 class RbfAdaptation
 {
+
+
   private:
     int _nbGaussians;
+    Eigen::Vector2i _nbGaussiansPerAxis;
+    Eigen::Vector2f _gridSize;
+    Eigen::Vector2f _gridCenter;
     float _kernelWidth;
-    float _gridWidth;
     float _adaptationRate;
 
     Eigen::VectorXf _weights;
@@ -16,7 +20,7 @@ class RbfAdaptation
     Eigen::MatrixXf _centers;
  
   public:
-    RbfAdaptation(int nbGaussiansPerRowColumn, float kernelWidth, float gridWidth, float gridXOffset, float gridYOffset, float adaptationRate);
+    RbfAdaptation(Eigen::Vector2i nbGaussiansPerAxis, Eigen::Vector2f gridSize, Eigen::Vector2f gridCenter, float kernelWidth, float adaptationRate);
 
     float update(float error, Eigen::Vector3f x);
 
