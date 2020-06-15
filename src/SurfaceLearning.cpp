@@ -23,9 +23,9 @@ SurfaceLearning::SurfaceLearning(ros::NodeHandle &n, double frequency, std::stri
   // _toolComPositionFromSensor << 0.0f,0.0f,0.02f;
   // _toolOffsetFromEE = 0.15f;
   // _toolMass = 0.1f;
-  _toolComPositionFromSensor << 0.0f,0.0f,0.04f;
-  _toolOffsetFromEE = 0.16f;
-  _toolMass = 0.03f;
+  _toolComPositionFromSensor << 0.0f,0.0f,0.02f;
+  _toolOffsetFromEE = 0.155f;
+  _toolMass = 0.08f;
 
   _x.setConstant(0.0f);
   _q.setConstant(0.0f);
@@ -45,8 +45,8 @@ SurfaceLearning::SurfaceLearning(ros::NodeHandle &n, double frequency, std::stri
   _datapointID = 0;
 
   _forceThreshold = 3.0f;
-  _heightThreshold = 1000.0f;
-  _heightOffset = 0.3f;
+  _heightThreshold = 0.1f;
+  _heightOffset = 0.4f;
 
   _firstRobotPose = false;
   _firstRobotTwist = false;
@@ -307,8 +307,8 @@ void SurfaceLearning::computeDesiredOrientation()
   {
     // Compute rotation error between current orientation and plane orientation using Rodrigues' law
     Eigen::Vector3f k;
-    k = (-_wRb.col(2)).cross(-_n);
-    float c = (-_wRb.col(2)).transpose()*(-_n);  
+    k = (_wRb.col(2)).cross(_n);
+    float c = (_wRb.col(2)).transpose()*(_n);  
     float s = k.norm();
     k /= s;
     

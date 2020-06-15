@@ -14,19 +14,7 @@ SurfacePolishing::SurfacePolishing(ros::NodeHandle &n, double frequency, std::st
   _targetVelocity(targetVelocity),
   _targetForce(targetForce),
   _adaptNormalModulation(adaptNormalModulation),
-  _rbfAdaptation(10, 1, 0.014, 10.0f*_dt, 10.0f*_dt, 0.07f, -0.07f,0.0f,0.0f),
-  // _rbfAdaptation2(10, 0.014, 0.14, 10.0f*_dt),
-  // _rbfAdaptationMotionT(10, 0.014, 0.14, 10.0f*_dt),
-  // _rbfAdaptationMotionTN(10, 0.014, 0.14, 10.0f*_dt),
-  // _rbfAdaptationMotionN(10, 0.014, 0.14, 10.0f*_dt)
-  // _rbfAdaptation2(90, 0.01, 0.9, -0.6f, 0.0f, 10.0f*_dt),
-  // _rbfAdaptationMotionT(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt),
-  // _rbfAdaptationMotionTN(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt),
-  // _rbfAdaptationMotionN(10, 0.06, 0.6, -0.6f, 0.0f, 10.0f*_dt)
-  _rbfAdaptation2(Eigen::Vector2i(90,90), Eigen::Vector2f(0.9,0.9), Eigen::Vector2f(-0.6f,0.0f), 0.01, 10.0f*_dt),
-  _rbfAdaptationMotionT(Eigen::Vector2i(10,10), Eigen::Vector2f(0.6,0.6), Eigen::Vector2f(-0.6f,0.0f), 0.06, 10.0f*_dt),
-  _rbfAdaptationMotionTN(Eigen::Vector2i(10,10), Eigen::Vector2f(0.6,0.6), Eigen::Vector2f(-0.6f,0.0f), 0.06, 10.0f*_dt),
-  _rbfAdaptationMotionN(Eigen::Vector2i(10,10), Eigen::Vector2f(0.6,0.6), Eigen::Vector2f(-0.6f,0.0f), 0.06, 10.0f*_dt)
+  _rbfAdaptation(10, 1, 0.014, 0.0f, 0.0f, 0.07f, -0.07f,0.0f,0.0f)
 {
   _fxm.setConstant(0.0f);
 
@@ -80,11 +68,19 @@ SurfacePolishing::SurfacePolishing(ros::NodeHandle &n, double frequency, std::st
   _n << 0.0f, 0.0f, -1.0f;
   // _polishingAttractor << -0.6f, 0.0f, 0.05f;
   // _polishingAttractor << -0.6f, 0.0f, 0.09f;
-  _polishingAttractor << -0.6f, 0.0f, 0.1f;
-  _sweepingAttractors[0] << -0.6f, 0.0f, 0.2f;
-  _sweepingAttractors[1] << -0.6f, -0.4f, 0.1f;
-  _sweepingAttractors[2] << -0.6f, 0.4f, 0.1f;
+  _polishingAttractor << -0.6f, 0.0f, 0.135f;
+  // // _sweepingAttractors[1] << -0.6f, -0.4f, 0.135f;
+  // // _sweepingAttractors[2] << -0.6f, 0.4f, 0.135f;
+  _sweepingAttractors[0] << -0.6f, 0.0f, 0.25f;
+  _sweepingAttractors[1] << -0.6f, -0.4f, 0.09f;
+  _sweepingAttractors[2] << -0.6f, 0.4f, 0.09;
+  // _sweepingAttractors[0] << -0.4f, -0.3f, 0.3f;
+  // _sweepingAttractors[1] << -0.4f, -0.3f, 0.09f;
+  // _sweepingAttractors[2] << -0.7f, 0.3f, 0.09;
+  
+
   _attractorID = 0;
+  _prevAttractorID = 0;
   _planeNormal << 0.0f, 0.0f, 1.0f;
   _normalDistanceTolerance = 0.05f;
   _normalForceTolerance = 3.0f;
@@ -112,7 +108,7 @@ SurfacePolishing::SurfacePolishing(ros::NodeHandle &n, double frequency, std::st
   _optitrackOK = false;
   _wrenchBiasOK = false;
   _stop = false;
-  _useOptitrack = false;
+  _useOptitrack = true;
 
   _markersPosition.setConstant(0.0f);
   _markersPosition0.setConstant(0.0f);
@@ -124,6 +120,29 @@ SurfacePolishing::SurfacePolishing(ros::NodeHandle &n, double frequency, std::st
   _optitrackCount = 0;
 
   _nbContact = 0;
+
+  _weightsAdaptationRate = 0.0f;
+
+
+  Eigen::ArrayXf tempX = Eigen::ArrayXf::LinSpaced(3, -0.12f, 0.12f);
+  Eigen::ArrayXf tempY = Eigen::ArrayXf::LinSpaced(2,-0.3f,0.3f);
+
+  std::cerr << tempX.size() << std::endl;
+  std::cerr << tempY.size() << std::endl;
+
+  int id = 0;
+  Eigen::Vector3f offset;
+  offset << -0.6f, 0.0f, 0.09f;
+  _attractorsGrid.row(0) = _sweepingAttractors[0].transpose();
+  for(int k = 0; k < tempX.size(); k++)
+  {
+    for(int m = 0; m < tempY.size(); m++)
+    {
+
+      _attractorsGrid.row(id+1) << tempX(k)+offset(0),tempY(m)+offset(1),0.0f+offset(2);
+      id++;
+    }
+  }
 
   _msgSurfaceMarker.header.frame_id = "world";
   _msgSurfaceMarker.header.stamp = ros::Time();
@@ -238,7 +257,7 @@ bool SurfacePolishing::init()
 
   _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+".txt");
 
-  if(!_nh.getParamCached("/lwr/ds_param/damping_eigval0",_d1))
+  if(!_nh.getParamCached("/lwr/joint_controllers/ds_param/damping_eigval0",_d1))
   {
     ROS_ERROR("[SurfacePolishing]: Cannot read first eigen value of passive ds controller");
     return false;
@@ -251,7 +270,7 @@ bool SurfacePolishing::init()
   }
 
   _outputFile2.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
-                  "_"+std::to_string(_rbfAdaptation2.getAdaptationRate())+"_weights.txt");
+                  +"_weights.txt");
 
   if(!_outputFile2.is_open())
   {
@@ -312,6 +331,66 @@ bool SurfacePolishing::init()
     _optitrackOK = true;
   }
 
+  // _rbfAdaptation2(10, 0.014, 0.14, 0.0f),
+  // _rbfAdaptationMotionT(10, 0.014, 0.14, 0.0f),
+  // _rbfAdaptationMotionTN(10, 0.014, 0.14, 0.0f),
+  // _rbfAdaptationMotionN(10, 0.014, 0.14, 0.0f)
+  // _rbfAdaptation2(90, 0.01, 0.9, -0.6f, 0.0f, 0.0f),
+  // _rbfAdaptationMotionT(10, 0.06, 0.6, -0.6f, 0.0f, 0.0f),
+  // _rbfAdaptationMotionTN(10, 0.06, 0.6, -0.6f, 0.0f, 0.0f),
+  // _rbfAdaptationMotionN(10, 0.06, 0.6, -0.6f, 0.0f, 0.0f)
+  // _rbfAdaptation2(std::vector<int>(90,90), std::vector<float>(0.9,0.9), std::vector<float>(-0.6f,0.0f), 0.01, 0.0f),
+  RbfAdaptation::InputParams params;
+  if (!_nh.getParam("rbfAdaptation/nbGaussiansPerAxis", params.nbGaussiansPerAxis))
+  {
+    ROS_ERROR("Couldn't retrieve the number of gaussians per axis");
+    return false;
+  }
+  if (!_nh.getParam("rbfAdaptation/gridSize", params.gridSize))
+  {
+    ROS_ERROR("Couldn't retrieve the grid size");
+    return false;
+  }
+  if (!_nh.getParam("rbfAdaptation/gridCenter", params.gridCenter))
+  {
+    ROS_ERROR("Couldn't retrieve the center position of the grid");
+    return false;
+  }
+  if (!_nh.getParam("rbfAdaptation/kernelWidth", params.kernelWidth))
+  {
+    ROS_ERROR("Couldn't retrieve the kernel width");
+    return false;
+  }
+  if (!_nh.getParam("rbfAdaptation/adaptationRate", params.adaptationRate))
+  {
+    ROS_ERROR("Couldn't retrieve the adaptation");
+    return false;
+  }
+  if (!_nh.getParam("rbfAdaptation/velocityRange", params.velocityRange))
+  {
+    ROS_ERROR("Couldn't retrieve the velocity range");
+    return false;
+  }
+  // std::cerr << params.nbGaussiansPerAxis[0] << " " << params.nbGaussiansPerAxis[1] << std::endl;
+  // std::cerr << params.gridSize[0] << " " << params.gridSize[1] << std::endl;
+  // std::cerr << params.gridCenter[0] << " " << params.gridCenter[1] << std::endl;
+  // std::cerr << params.adaptationRate << std::endl;
+
+  // std::cerr << params.kernelWidth << std::endl;
+
+
+  _rbfAdaptation2.init(params);
+  // _rbfAdaptation2.init(std::vector<int>(10,10), std::vector<float>(0.14f,0.14f), std::vector<float>(0.0f,0.0f), 0.014f, 0.0f);
+  // _rbfAdaptation2(std::vector<int>(10,10), std::vector<float>(0.14f,0.14f), std::vector<float>(0.0f,0.0f), 0.014f, 0.0f),
+
+  // _rbfAdaptationMotionT.init(std::vector<int>{10,10}, std::vector<float>{0.6,0.6}, std::vector<float>{-0.6f,0.0f}, 0.06, 0.0f);
+  // _rbfAdaptationMotionTN.init(std::vector<int>{10,10}, std::vector<float>{0.6,0.6}, std::vector<float>{-0.6f,0.0f}, 0.06, 0.0f);
+  // _rbfAdaptationMotionN.init(std::vector<int>{10,10}, std::vector<float>{0.6,0.6}, std::vector<float>{-0.6f,0.0f}, 0.06, 0.0f);
+
+  _rbfAdaptationMotionT.init(std::vector<int>{10,10}, std::vector<float>{0.2,0.2}, std::vector<float>{-0.0f,0.0f}, 0.02f, 0.0f);
+  _rbfAdaptationMotionTN.init(std::vector<int>{10,10}, std::vector<float>{0.2,0.2}, std::vector<float>{-0.0f,0.0f}, 0.02f, 0.0f);
+  _rbfAdaptationMotionN.init(std::vector<int>{10,10}, std::vector<float>{0.2,0.2}, std::vector<float>{-0.0f,0.0f}, 0.02f, 0.0f);
+
   if (_nh.ok()) 
   { 
     // Wait for poses being published
@@ -339,7 +418,7 @@ void SurfacePolishing::run()
       _mutex.lock();
 
       // Check for update of the DS-impedance controller gain
-      ros::param::getCached("/lwr/ds_param/damping_eigval0",_d1);
+      ros::param::getCached("/lwr/joint_controllers/ds_param/damping_eigval0",_d1);
 
       if(_d1<1.0f)
       {
@@ -394,6 +473,8 @@ void SurfacePolishing::run()
   // _outputFile << _rbfAdaptation.get_sigma();
   // _outputFile.close();
 
+  // _outputFile2 << _rbfAdaptation2.getWeights().transpose() << std::endl;
+
   _outputFile.close();
   _outputFile2.close();
   // _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
@@ -401,11 +482,11 @@ void SurfacePolishing::run()
   // _outputFile << _rbfAdaptation2.getWeights();
   // _outputFile.close();
   _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
-                   "_"+std::to_string(_rbfAdaptation2.getAdaptationRate())+"_centers.txt");
+                   "_centers.txt");
   _outputFile << _rbfAdaptation2.getCenters();
   _outputFile.close();
   _outputFile.open(ros::package::getPath(std::string("ds_based_contact_tasks"))+"/data_polishing/"+_fileName+
-                  "_"+std::to_string(_rbfAdaptation2.getAdaptationRate())+"_sigmas.txt");
+                  "_sigmas.txt");
   _outputFile << _rbfAdaptation2.getWidths();
   _outputFile.close();
 
@@ -427,6 +508,9 @@ bool SurfacePolishing::allSubscribersOK()
   }
   else
   {
+    // std::cerr << _firstRobotPose << _firstRobotTwist << _wrenchBiasOK <<
+    // _firstOptitrackPose[ROBOT_BASIS] << _firstOptitrackPose[P1] <<
+    // _firstOptitrackPose[P2] << _firstOptitrackPose[P3] << _firstDampingMatrix << std::endl;
     return _firstRobotPose && _firstRobotTwist && _wrenchBiasOK &&
     _firstOptitrackPose[ROBOT_BASIS] && _firstOptitrackPose[P1] &&
     _firstOptitrackPose[P2] && _firstOptitrackPose[P3] && _firstDampingMatrix;     
@@ -443,10 +527,10 @@ void SurfacePolishing::computeCommand()
   updateContactState();
 
   // Compute nominal DS
-  computeNominalDS2();
+  computeNominalDS();
 
   // Compute desired contact force profile
-  computeDesiredContactForceProfile2();
+  computeDesiredContactForceProfile();
 
   // Compute modulation terms
   computeModulationTerms();
@@ -515,6 +599,10 @@ void SurfacePolishing::updateSurfaceInformation()
       // The surface is learned with respect to a frame defined by the marker P1
       // We get the robot position in the surface frame
       Eigen::Vector3f x;
+
+      // if(_markersTracked(P1) && _markersTracked(P2) && _markersTracked(P3))
+      {
+
       _p1 = _markersPosition.col(P1)-_markersPosition0.col(ROBOT_BASIS);
       _p2 = _markersPosition.col(P2)-_markersPosition0.col(ROBOT_BASIS);
       _p3 = _markersPosition.col(P3)-_markersPosition0.col(ROBOT_BASIS);
@@ -523,6 +611,11 @@ void SurfacePolishing::updateSurfaceInformation()
       _wRs.col(0) = (_p1-_p3).normalized();
       _wRs.col(1) = (_p1-_p2).normalized();
       _wRs.col(2) = ((_wRs.col(0)).cross(_wRs.col(1))).normalized();
+      }
+      // else
+      // {
+      //   ROS_INFO("MARKER NOT TRACKED !!!!!!!!!!!!!!!!!!!")
+      // }
 
       // Compute robot postion in surface frame
       x = _wRs.transpose()*(_x-_p1);
@@ -557,7 +650,7 @@ void SurfacePolishing::updateSurfaceInformation()
 }
 
 
-Eigen::Vector3f SurfacePolishing::polishingDS(Eigen::Vector3f position, Eigen::Vector3f attractor)
+Eigen::Vector3f SurfacePolishing::polishingDS(Eigen::Vector3f position, Eigen::Vector3f attractor, float r)
 {
   Eigen::Vector3f velocity;
 
@@ -568,8 +661,9 @@ Eigen::Vector3f SurfacePolishing::polishingDS(Eigen::Vector3f position, Eigen::V
   float R = sqrt(position(0) * position(0) + position(1) * position(1));
   float T = atan2(position(1), position(0));
 
-  float r = 0.05f;
+  // float r = 0.05f;
   float omega = M_PI;
+  // float omega = _targetVelocity/r;
 
   velocity(0) = -(R-r) * cos(T) - R * omega * sin(T);
   velocity(1) = -(R-r) * sin(T) + R * omega * cos(T);
@@ -675,6 +769,7 @@ void SurfacePolishing::computeNominalDS()
   else 
   {
     _polishingAttractor = _p1+0.48f*(_p2-_p1)+0.5f*(_p3-_p1);
+    std::cerr << (_wRs.transpose()*(_polishingAttractor-_p1)).transpose();
 
     // Compute normal distance and vector at the attractor location in the surface frame
     Eigen::Vector3f x, attractorNormal; 
@@ -691,6 +786,13 @@ void SurfacePolishing::computeNominalDS()
 
   // The reaching velocity direction is aligned with the normal vector to the surface
   Eigen::Vector3f v0 = _targetVelocity*_n;
+  // Eigen::Vector3f v0 = polishingDS(_x,_polishingAttractor);
+  // if(v0.norm()>_targetVelocity)
+  // {
+  //   v0 = v0*_targetVelocity/v0.norm();
+  // }
+  std::cerr << "v0: " << v0.transpose() << std::endl;
+
  
   // Compute normalized circular dynamics projected onto the surface
   Eigen::Vector3f vdContact;
@@ -737,20 +839,86 @@ void SurfacePolishing::computeNominalDS2()
 {
   Eigen::Vector3f fx;
 
-  if((_sweepingAttractors[_attractorID]-_x).norm()<0.03)
+  Eigen::Matrix3f S;
+  S.setConstant(0.0f);
+  S(0,0) = 1.0f;
+  S(1,1) = 1.0f;
+  if((S*(_sweepingAttractors[_attractorID]-_x)).norm()<0.03)
   {
+    _prevAttractorID = _attractorID;
     _attractorID++;
     if(_attractorID>2)
     {
-      _attractorID = 0;
+      _attractorID =1;
     }
   }
 
+  // if((S*(_attractorsGrid.row(_attractorID).transpose()-_x)).norm()<0.02)
+  // {
+  //   _prevAttractorID = _attractorID;
+  //   _attractorID++;
+  //   if(_attractorID==_attractorsGrid.rows())
+  //   {
+  //     _attractorID = 0;
+  //   }
+  // }
+
+  // std::cerr << _attractorID << std::endl;
+
+
+  // float gain;
+  // if(_prevAttractorID==_attractorID)
+  // {
+  //   gain = 1;    
+  // }
+  // else
+  // { Eigen::Vector3f center, line;
+  //   center = (_sweepingAttractors[_attractorID]+_sweepingAttractors[_prevAttractorID])/2.0f;
+  //   line = (_sweepingAttractors[_attractorID]-_sweepingAttractors[_prevAttractorID]);
+  //   float distance = (_x-_sweepingAttractors[_prevAttractorID]).dot(line.normalized());
+  //   float a = 1.0f/3.0f;
+  //   if(distance<a)
+  //   {
+  //     gain = sin(distance*M_PI/(2*a));
+  //   }
+  //   else if(distance>1-a)
+  //   {
+  //     gain = std::cos((M_PI/(2*a)*(distance+a-1)));
+  //   }
+  //   else
+  //   {
+  //     gain = 1.0f;
+  //   }
+  // }
+
+  // std::cerr << "gain: " << gain << " " << _prevAttractorID << " " << _attractorID << std::endl;
+
+
   fx = _sweepingAttractors[_attractorID]-_x;
+  Eigen::Matrix3f gains;
+  gains.setConstant(0.0f);
+  gains(0,0) = 8.0f;
+  gains(1,1) = 8.0f;
+  gains(2,2) = 1.0f;
+  fx = gains*fx;
   fx *= _targetVelocity/fx.norm();
   std::cerr << _attractorID << " "<< (_sweepingAttractors[_attractorID]-_x).norm() << std::endl;
 
-  if(_attractorID == 2)
+  // fx = _attractorsGrid.row(_attractorID).transpose()-_x;
+  // Eigen::Matrix3f gains;
+  // gains.setConstant(0.0f);
+  // gains(0,0) = 10.0f;
+  // gains(1,1) = 10.0f;
+  // gains(2,2) = 1.0f;
+  // fx = gains*fx;
+
+  if(fx.norm()>_targetVelocity)
+  {
+    fx *= _targetVelocity/fx.norm();
+  }
+  // std::cerr << _attractorID << " "<< (_attractorsGrid.row(_attractorID).transpose()-_x).norm() << std::endl;
+
+  if(_attractorID > 0)
   {
     _fxc.setConstant(0.0f);
     if(_contactState == CONTACT)
@@ -772,6 +940,104 @@ void SurfacePolishing::computeNominalDS2()
   _fx = _fxc+_fxr;
 }
 
+// void SurfacePolishing::computeNominalDS2()
+// {
+//   Eigen::Vector3f offset, xa;
+//   offset << -0.55f, 0.0f, 0.09f;
+//   float vy = 0.1f;
+//   float vmax = 0.2f;
+//   float Lx = 0.3f;
+//   float Ly = 0.6f;
+//   // _sweepingAttractors[0] << offset(0)+a, -L/2.0f, 0.3f;
+//   // _sweepingAttractors[1] << offset(0)+a, -L/2.0f, offset(2);
+//   // _sweepingAttractors[2] << offset(0)-a, L/2.0f, offset(2);
+
+
+//   // xa << a*std::sin(-9.0f*M_PI/L*(_x(1)-offset(1))), 
+//   //       L/2.0f,
+//   //       0.0f;
+//   _sweepingAttractors[0] << offset(0)-Lx/2.0f, -Ly/2.0f, 0.3f;
+//   _sweepingAttractors[1] << offset(0)-Lx/2.0f, -Ly/2.0f, offset(2);
+//   _sweepingAttractors[2] << offset(0)+Lx/2.0f, Ly/2.0f, offset(2);
+
+
+//   xa << Lx/2.0f,
+//         Ly/2.0f*std::sin(9.0f*M_PI/Lx*(_x(0)-offset(0))), 
+//         0.0f;
+
+
+//   xa+=offset;
+
+
+//   Eigen::Vector3f fx;
+
+//   Eigen::Matrix3f S;
+//   S.setConstant(0.0f);
+//   S(0,0) = 1.0f;
+//   S(1,1) = 1.0f;
+//   S(2,2) = 1.0f;
+
+
+//   if((S*(_sweepingAttractors[_attractorID]-_x)).norm()<0.03f)
+//   {
+//     _prevAttractorID = _attractorID;
+//     if(_attractorID==1)
+//     {
+//       if(_contactState==CONTACT)
+//       {
+//         _attractorID++;
+//       }
+//     }
+//     else
+//     {
+//       _attractorID++;
+//     }
+//     if(_attractorID>2)
+//     {
+//       _attractorID =0;
+//     }
+//   }
+
+//   if(_attractorID==2)
+//   {
+//     fx = xa-_x;
+//     fx(0) = std::min(5.0f*fx(0),vy);
+//     fx(1) *= 15;
+//     // fx(0) *= 20;
+//     // fx(1) = std::min(5.0f*fx(1),vy);
+//   }
+//   else
+//   {
+//     fx = 3.0f*(_sweepingAttractors[_attractorID]-_x);
+//   }
+  
+//   std::cerr << (xa+offset).transpose() << std::endl;
+
+//   if(fx.norm()>_targetVelocity)
+//   {
+//     fx *= _targetVelocity/fx.norm();
+//   }
+
+//   // std::cerr << _attractorID << " "<< (_attractorsGrid.row(_attractorID).transpose()-_x).norm() << std::endl;
+
+
+//   _fxc.setConstant(0.0f);
+//   if(_contactState == CONTACT && _attractorID == 2)
+//   {
+//     _fxr = (Eigen::Matrix3f::Identity()-_n*_n.transpose())*fx;
+//   }
+//   else
+//   {
+//     _fxr = fx;
+//     // _fxr.setConstant(0.0f);
+//     // _fxr(2) = xa(2)-(_x(2)-offset(2));
+//   }
+
+//   std::cerr << _attractorID << " fxr: " <<_fxr.transpose() << " " << (S*(_sweepingAttractors[_attractorID]-_x)).norm() <<std::endl;
+//   // _fxr.setConstant(0.0f);
+//   _fx = _fxc+_fxr;
+// }
+
 
 void SurfacePolishing::computeDesiredContactForceProfile()
 {
@@ -792,12 +1058,12 @@ void SurfacePolishing::computeDesiredContactForceProfile()
 
 void SurfacePolishing::computeDesiredContactForceProfile2()
 {
-  if(_contactState==CONTACT && _attractorID == 2)
+  if(_contactState==CONTACT && _attractorID > 0)
   {
     _Fd = _targetForce;
     // _Fd = _Fds;
   }
-  else if(_contactState==CLOSE_TO_CONTACT && _attractorID == 2)
+  else if(_contactState==CLOSE_TO_CONTACT && _attractorID > 0)
   {
     _Fd = 3.0f;
   }
@@ -834,18 +1100,53 @@ void SurfacePolishing::computeModulationTerms()
     Eigen::Vector3f xs = _wRs.transpose()*(_x-_polishingAttractor);
     xs(2) = 0.0f;
 
-    alpha = _rbfAdaptationMotionT.update((_v-_fx).dot(t),xs);
-    beta = _rbfAdaptationMotionTN.update((_v-_fx).dot(tn),xs);
-    gamma = _rbfAdaptationMotionN.update((_v-_fx).dot(_n),xs);
+    // alpha = _rbfAdaptationMotionT.update((_v-_fx).dot(t),xs);
+    // beta = _rbfAdaptationMotionTN.update((_v-_fx).dot(tn),xs);
+    // gamma = _rbfAdaptationMotionN.update((_v-_fx).dot(_n),xs);
+    Eigen::Vector3f bou; 
+    // bou = polishingDS(_x,_polishingAttractor) 
+    alpha = _rbfAdaptationMotionT.update(_v(0)-_fx(0),xs);
+    beta = _rbfAdaptationMotionTN.update(_v(1)-_fx(1),xs);
+    gamma = _rbfAdaptationMotionN.update(_v(2)-_fx(2),xs);
     // beta = 0.0f;
-    gamma = 0.0f;
+    // gamma = 0.0f;
+    _fxm << alpha,beta,gamma;
 
-    _fxm = alpha*t+beta*tn+gamma*_n;
+    // _fxm.setConstant(0.0f);
+    // if(_contactState == CONTACT)
+    // Eigen::Matrix3f S;
+    // S.setConstant(0.0f);
+    // S(0,0) = 1.0f;
+    // S(1,1) = 1.0f;
+    // float R = (S*(_x-_polishingAttractor)).norm();
+    // if(0.05f-R< 0.05)
+    // {
+    //   _r+= 10.0f*_dt*(0.05f-R);
+    //   // Eigen::Vector3f e;
+    //   // e = _fx-_v;
+    //   // Eigen::Vector3f diff = (Eigen::Matrix3f::Identity()-_n*_n.transpose())*(polishingDS(_x,_polishingAttractor,0.05f+0.01)-
+    //   //   polishingDS(_x,_polishingAttractor,0.05f-0.01))/0.02;
+
+    //   // _r += _dt*e.dot(diff);
+
+    //   if(_r<-0.03)
+    //   {
+    //     _r = -0.03;
+    //   }
+    //   else if(_r>0.03f)
+    //   {
+    //     _r = 0.03f;
+    //   }
+    //   std::cerr << "r: " <<  _r << std::endl;
+    // }
+    // _fxm = alpha*t+beta*tn+gamma*_n;
     std::cerr << "radius: " << (_x-_polishingAttractor).norm() << " " << (_v-_fx).dot(tn) << " beta: " << beta << std::endl;
-    std::cerr << "v: " << _v.transpose() <<std::endl;
-    std::cerr << "fx: " << _fx.transpose() <<std::endl;
-    std::cerr << "tn: " << tn.transpose() <<std::endl;
+    std::cerr << _fxm.transpose() << std::endl;
+    // std::cerr << "v: " << _v.transpose() <<std::endl;
+    // std::cerr << "fx: " << _fx.transpose() <<std::endl;
+    // std::cerr << "tn: " << tn.transpose() <<std::endl;
   }
+
 
 
   if(!_adaptNormalModulation)
@@ -865,15 +1166,24 @@ void SurfacePolishing::computeModulationTerms()
     //   _deltaF = -_gammaF*_Fd;
     // }
 
-    // Eigen::Vector3f xs = _wRs.transpose()*(_x-_polishingAttractor);
-    Eigen::Vector3f xs = _wRs.transpose()*(_x);
+    // static bool first = false;
+    // if(ros::Time::now().toSec()-_timeInit>10.0f && !first)
+    // {
+    //   first = true;
+    //   _weightsAdaptationRate = 20.0f*_dt;
+    //   _rbfAdaptation2.setAdaptationRate(_weightsAdaptationRate);
+    // }
+
+    Eigen::Vector3f xs = _wRs.transpose()*(_x-_polishingAttractor);
+    // Eigen::Vector3f xs = _wRs.transpose()*(_x);
     xs(2) = 0.0f;
     // _deltaF = _c*_rbfAdaptation.update(-(_Fd-_normalForce),_x(0),_x(1));
     std::cerr << "xs: " << xs.transpose() << std::endl;
-    if(_contactState==CONTACT && _attractorID == 2)
+    // if(_contactState==CONTACT && _attractorID > 0)
+    if(_contactState==CONTACT)
     {
       // _deltaF = _rbfAdaptation.update(-(_Fd-_normalForce),xs(0),xs(1));
-      _deltaF = _rbfAdaptation2.update(Utils<float>::wrapToZero(-(_Fd-_normalForce),-6.0f,6.0f),xs);
+      _deltaF = _rbfAdaptation2.update(Utils<float>::wrapToZero(-(_Fd-_normalForce),-10.0f,10.0f),xs);
       // _deltaF = _rbfAdaptation2.update(-(_Fd-_normalForce),xs);
       _deltaF = (_deltaF>10.0f) ? 10.0f : _deltaF;
       _deltaF = (_deltaF<-10.0f) ? -10.0f : _deltaF;
@@ -1100,7 +1410,8 @@ void SurfacePolishing::logData()
               << _rbfAdaptation.get_epsilon() << " "
               << (_markersPosition.col(P2)-_markersPosition.col(ROBOT_BASIS)).transpose() << " "
               << (_markersPosition.col(P3)-_markersPosition.col(ROBOT_BASIS)).transpose() << " "
-              << _polishingAttractor.transpose() <<std::endl;
+              << _polishingAttractor.transpose() << " " 
+              << _weightsAdaptationRate << std::endl;
 
   _outputFile2 << _rbfAdaptation2.getWeights().transpose() << std::endl;
 }
@@ -1351,10 +1662,11 @@ void SurfacePolishing::dynamicReconfigureCallback(ds_based_contact_tasks::surfac
   _offset(0) = config.xOffset;
   _offset(1) = config.yOffset;
   _offset(2) = config.zOffset;
-  _rbfAdaptation.set_epsilon(config.adaptationRateWeights*_dt);
+  _weightsAdaptationRate = config.adaptationRateWeights*_dt;
+  _rbfAdaptation.set_epsilon(_weightsAdaptationRate);
   //_rbfAdaptation.set_sigma(config.sigma);
   _rbfAdaptation.set_epsilon_sigma(config.adaptationRateSigmas*_dt);
-  _rbfAdaptation2.setAdaptationRate(config.adaptationRateWeights*_dt);
+  _rbfAdaptation2.setAdaptationRate(_weightsAdaptationRate);
   _rbfAdaptationMotionT.setAdaptationRate(config.adaptationRateMotion*_dt);
   _rbfAdaptationMotionTN.setAdaptationRate(config.adaptationRateMotion*_dt);
   _rbfAdaptationMotionN.setAdaptationRate(config.adaptationRateMotion*_dt);

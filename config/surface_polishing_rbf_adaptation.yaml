@@ -1,0 +1,12 @@
+rbfAdaptation/nbGaussiansPerAxis: [10, 10]
+rbfAdaptation/gridSize: [0.16, 0.16]
+rbfAdaptation/gridCenter: [0.0, 0.0]
+rbfAdaptation/kernelWidth: 0.016
+rbfAdaptation/adaptationRate: 0.0
+rbfAdaptation/velocityRange: 0.4
+# rbfAdaptation/nbGaussiansPerAxis: [10, 60,4,4]
+# rbfAdaptation/gridSize: [0.1, 0.6]
+# rbfAdaptation/gridCenter: [-0.6, 0.0]
+# rbfAdaptation/kernelWidth: 0.01
+# rbfAdaptation/adaptationRate: 0.0
+# rbfAdaptation/velocityRange: 0.4

@@ -25,6 +25,8 @@ if(NOT Eigen_FOUND)
   include(cmake/FindEigen3.cmake)
 endif() 
 
+find_package(Boost REQUIRED) 
+
 ## Generate added messages and services
 generate_messages(DEPENDENCIES std_msgs)
 
@@ -41,6 +43,10 @@ catkin_package(
 
 include_directories(${EIGEN3_INCLUDE_DIR})
 include_directories(include ${catkin_INCLUDE_DIRS})
+set(LIMBO_INCLUDE_DIRECTORY "/home/walid/libraries/limbo/src")
+set(LIMBO_LINK_DIRECTORY "/home/walid/libraries/limbo/build/src")
+include_directories(${LIMBO_INCLUDE_DIRECTORY})
+link_directories(${LIMBO_LINK_DIRECTORY})
 
 
 add_executable(surface_learning src/surfaceLearning_node.cpp src/SurfaceLearning.cpp)
@@ -58,6 +64,21 @@ add_dependencies(two_robots_transform ${PROJECT_NAME}_gencpp)
 add_executable(object_grasping src/objectGrasping_node.cpp src/ObjectGrasping.cpp src/Workspace.cpp)
 target_link_libraries(object_grasping ${catkin_LIBRARIES})
 add_dependencies(object_grasping ${PROJECT_NAME}_gencpp)
+
+add_executable(adaptive_surface_polishing src/adaptiveSurfacePolishing_node.cpp src/AdaptiveSurfacePolishing.cpp src/RbfAdaptation.cpp)
+target_link_libraries(adaptive_surface_polishing ${catkin_LIBRARIES})
+add_dependencies(adaptive_surface_polishing ${PROJECT_NAME}_gencpp)
+
+add_executable(surface_cutting src/surfaceCutting_node.cpp src/SurfaceCutting.cpp src/CascadedBiquad.cpp)
+target_link_libraries(surface_cutting ${catkin_LIBRARIES} limbo boost_system boost_serialization boost_filesystem)
+add_dependencies(surface_cutting ${PROJECT_NAME}_gencpp)
+
+
+add_executable(surface_puncturing src/surfacePuncturing_node.cpp src/SurfacePuncturing.cpp src/CascadedBiquad.cpp)
+target_link_libraries(surface_puncturing ${catkin_LIBRARIES} limbo boost_system boost_serialization boost_filesystem)
+add_dependencies(surface_puncturing ${PROJECT_NAME}_gencpp)
+
+
 
 FILE(GLOB SRCS src/SurfaceLearning.cpp src/SurfacePolishing.cpp src/TwoRobotsTransform.cpp src/ObjectGrasping.cpp)
 FILE(GLOB INCS include/SurfaceLearning.h include/SurfacePolishing.h include/TwoRobotsTransform.h include/ObjectGrasping.h)

@@ -1,5 +1,5 @@
-#ifndef __SURFACE_POLISHING_H__
-#define __SURFACE_POLISHING_H__
+#ifndef __ADAPTIVE_SURFACE_POLISHING_H__
+#define __ADAPTIVE_SURFACE_POLISHING_H__
 
 #include <signal.h>
 #include <mutex>
@@ -33,8 +33,12 @@
 #define NB_OPTITRACK_SAMPLES 100     // Number of optitrack samples used for initial objects' pose estimation
 #define NB_TRACKED_OBJECTS 4         // Number of objects tracked by the motion capture system (optitrack)
 #define MOVING_FORCE_WINDOW_SIZE 10  // Window's size used to average the force data and detect peristent contact
+#define NB_TASKS 2
+#define NB_PARAMS_POLISHING 5
 
-class SurfacePolishing 
+
+
+class AdaptiveSurfacePolishing 
 {
 	public:
 		// Surface type (planar or non flat)
@@ -50,6 +54,11 @@ class SurfacePolishing
     // ROBOT_BASIS Markers placed at the basis of the robot
     // P{i=1,..3} Markers placed on the target surface 	
     enum ObjectID {ROBOT_BASIS = 0, P1 = 1, P2 = 2, P3 = 3};
+
+    enum Tasks {RETREAT=0, POLISHING = 1, ATTRACTOR1 = 2, ATTRACTOR2 = 3};
+
+    enum Parameters {X_OFFSET=0,Y_OFFSET=1,Z_OFFSET=2, X_SCALE =3, Y_SCALE=4};
+
 
 	private:
 		///////////////////
@@ -109,6 +118,7 @@ class SurfacePolishing
 		Eigen::Matrix<float,6,1> _wrench;					 // Wrench [N and Nm] (6x1)
 		Eigen::Matrix<float,6,1> _wrenchBias;			 // Wrench bias [N and Nm] (6x1)
 		Eigen::Matrix<float,6,1> _filteredWrench;	 // Filtered wrench [N and Nm] (6x1)
+		Eigen::Vector3f _F;												 // Measured end effector force [N] (3x1)
     float _normalForce;												 // Normal force to the surface [N]
 		int _wrenchCount;													 // Counter used to pre-process the force data
     float _normalDistance;										 // Normal distance to the surface [m]
@@ -224,36 +234,38 @@ class SurfacePolishing
 		std::ofstream _outputFile;  	// Output stream object to right to a text file
 		std::ofstream _outputFile2;  	// Output stream object to right to a text file
 		std::mutex _mutex;  					// Mutex variable
-		static SurfacePolishing* me;  // Pointer on the instance of the class
-
+		static AdaptiveSurfacePolishing* me;  // Pointer on the instance of the class
 
 
 		// Dynamic reconfigure (server+callback)
 		dynamic_reconfigure::Server<ds_based_contact_tasks::surfacePolishing_paramsConfig> _dynRecServer;
 		dynamic_reconfigure::Server<ds_based_contact_tasks::surfacePolishing_paramsConfig>::CallbackType _dynRecCallback;
 
-
-		Rbf_parameter _rbfAdaptation;
-		RbfAdaptation _rbfAdaptation2;
-		Eigen::Vector3f _sweepingAttractors[3];
-		int _attractorID;
-		int _prevAttractorID;
-		RbfAdaptation _rbfAdaptationMotionT;
-		RbfAdaptation _rbfAdaptationMotionTN;
-		RbfAdaptation _rbfAdaptationMotionN;
+		RbfAdaptation _rbfAdaptation;
 		float _weightsAdaptationRate;
-		Eigen::Matrix<float,7,3> _attractorsGrid;
 
-		float _r = 0.0f;
 
+		Eigen::Matrix<float,NB_PARAMS_POLISHING,1> _parameters;
+		int _adaptationWindowLength;
+		std::deque<Eigen::Vector3f> _positionWindow;
+		std::deque<Eigen::Vector3f> _positionWindowLeft;
+		std::deque<Eigen::Vector3f> _velocityWindow;
+   	Eigen::Matrix<float,NB_TASKS,1> _beliefs;
+   	Eigen::Matrix<float,NB_TASKS,1> _dbeliefs;   	
+   	Eigen::Vector3f _fxk[NB_TASKS];
+   	float _Fdk[NB_TASKS];
+   	Eigen::Vector3f _nk[NB_TASKS];
+   	float _adaptationRate;
+   	Eigen::Vector3f _homeAttractor;
+   	Eigen::Vector3f _attractor1;
+   	Eigen::Vector3f _attractor2;
+   	float _Ft;
 
 	public:
 
 		// Class constructor
-		SurfacePolishing(ros::NodeHandle &n, double frequency, std::string fileName, 
-			               SurfaceType surfaceType, float targetVelocity, 
-			               float targetForce,
-			               bool adaptNormalModulation);
+		AdaptiveSurfacePolishing(ros::NodeHandle &n, double frequency, std::string fileName, SurfaceType surfaceType, 
+			                       float targetVelocity, float targetForce, bool adaptNormalModulation);
 
 		// Initialize node
 		bool init();
@@ -277,20 +289,24 @@ class SurfacePolishing
 		// Update contact state with the surface
 		void updateContactState();
 
-		// Generate circular motion dynamics
-		Eigen::Vector3f polishingDS(Eigen::Vector3f position, Eigen::Vector3f attractor, float r = 0.05f);
-
 		// Compute nominal DS
 		void computeNominalDS();
 
-		void computeNominalDS2();
+		void updateIndividualTasks();
+
+		void taskAdaptation();
+		
+    void polishingAdaptation();
+
+		// Generate polishing motion dynamicso on the surface
+		Eigen::Vector3f polishingDS(Eigen::Vector3f position, Eigen::VectorXf parameters);
+
+		// Generate circular motion dynamics
+		Eigen::Vector3f circularDS(Eigen::Vector3f position, Eigen::Vector3f attractor, Eigen::VectorXf parameters, float r = 0.05f);
 
 		// Compute desired contact force profile
 		void computeDesiredContactForceProfile();
 		
-		void computeDesiredContactForceProfile2();
-
-
 		// Compute modulation terms along tangential and normal direction to the surface
 		void computeModulationTerms();
 
@@ -332,6 +348,8 @@ class SurfacePolishing
 
     // Callback for dynamic reconfigure
     void dynamicReconfigureCallback(ds_based_contact_tasks::surfacePolishing_paramsConfig &config, uint32_t level);
+
+
 };
 
 

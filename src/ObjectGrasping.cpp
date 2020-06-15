@@ -24,6 +24,7 @@ ObjectGrasping::ObjectGrasping(ros::NodeHandle &n, double frequency, std::string
   _objectDim << 0.41f, 0.22f, 0.22f;
 
   _smax = 4.0f;
+  // _smax = 40.0f;
   for(int k= 0; k < NB_ROBOTS; k++)
   {
     _x[k].setConstant(0.0f);
@@ -68,7 +69,7 @@ ObjectGrasping::ObjectGrasping(ros::NodeHandle &n, double frequency, std::string
   _stop = false;
   _goHome = false;
 
-  _objectAttractor << -0.4f, 0.5f, 0.6f;
+  _objectAttractor << -0.4f, 0.45f, 0.45f;
   _xhC << -0.4f, 0.45f, 0.7f;
   _xhD << 0.0f,-1.0f,0.0f;
   _xhD *= 0.7f; 
@@ -94,7 +95,7 @@ ObjectGrasping::ObjectGrasping(ros::NodeHandle &n, double frequency, std::string
   _markersPosition0.setConstant(0.0f);
   _markersSequenceID.setConstant(0);
   _markersTracked.setConstant(0);
-  _leftRobotOrigin << 0.066f, 0.9f, 0.0f;
+  _leftRobotOrigin << 0.0f, 0.9f, 0.0f;
   _optitrackCount = 0;
 
   _xoC << -0.3f, _leftRobotOrigin(1)/2.0f, _objectDim(2)/2.0f;
@@ -143,21 +144,21 @@ bool ObjectGrasping::init()
 {
   // Subscriber definitions
   _subRobotPose[RIGHT] = _nh.subscribe<geometry_msgs::Pose>("/lwr/ee_pose", 1, boost::bind(&ObjectGrasping::updateRobotPose,this,_1,RIGHT),ros::VoidPtr(), ros::TransportHints().reliable().tcpNoDelay());
-  _subRobotTwist[RIGHT] = _nh.subscribe<geometry_msgs::Twist>("/lwr/joint_controllers/twist", 1, boost::bind(&ObjectGrasping::updateRobotTwist,this,_1,RIGHT),ros::VoidPtr(), ros::TransportHints().reliable().tcpNoDelay());
+  _subRobotTwist[RIGHT] = _nh.subscribe<geometry_msgs::Twist>("/lwr/ee_vel", 1, boost::bind(&ObjectGrasping::updateRobotTwist,this,_1,RIGHT),ros::VoidPtr(), ros::TransportHints().reliable().tcpNoDelay());
   _subDampingMatrix[RIGHT] = _nh.subscribe<std_msgs::Float32MultiArray>("/lwr/joint_controllers/passive_ds_damping_matrix", 1, boost::bind(&ObjectGrasping::updateDampingMatrix,this,_1,RIGHT),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
   _subForceTorqueSensor[RIGHT] = _nh.subscribe<geometry_msgs::WrenchStamped>("/ft_sensor_right/netft_data", 1, boost::bind(&ObjectGrasping::updateRobotWrench,this,_1,RIGHT),ros::VoidPtr(), ros::TransportHints().reliable().tcpNoDelay());
 
   _subRobotPose[LEFT] = _nh.subscribe<geometry_msgs::Pose>("/lwr2/ee_pose", 1, boost::bind(&ObjectGrasping::updateRobotPose,this,_1,LEFT),ros::VoidPtr(), ros::TransportHints().reliable().tcpNoDelay());
-  _subRobotTwist[LEFT] = _nh.subscribe<geometry_msgs::Twist>("/lwr2/joint_controllers/twist", 1, boost::bind(&ObjectGrasping::updateRobotTwist,this,_1,LEFT),ros::VoidPtr(), ros::TransportHints().reliable().tcpNoDelay());
+  _subRobotTwist[LEFT] = _nh.subscribe<geometry_msgs::Twist>("/lwr2/ee_vel", 1, boost::bind(&ObjectGrasping::updateRobotTwist,this,_1,LEFT),ros::VoidPtr(), ros::TransportHints().reliable().tcpNoDelay());
   _subDampingMatrix[LEFT] = _nh.subscribe<std_msgs::Float32MultiArray>("/lwr2/joint_controllers/passive_ds_damping_matrix", 1, boost::bind(&ObjectGrasping::updateDampingMatrix,this,_1,LEFT),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
   _subForceTorqueSensor[LEFT] = _nh.subscribe<geometry_msgs::WrenchStamped>("/ft_sensor_left/netft_data", 1, boost::bind(&ObjectGrasping::updateRobotWrench,this,_1,LEFT),ros::VoidPtr(), ros::TransportHints().reliable().tcpNoDelay());
 
-  _subOptitrackPose[ROBOT_BASIS_RIGHT] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/robot_right/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,ROBOT_BASIS_RIGHT),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[ROBOT_BASIS_LEFT] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/robot_left/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,ROBOT_BASIS_LEFT),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[P1] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/p1/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,P1),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[P2] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/p2/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,P2),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[P3] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/p3/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,P3),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
-  _subOptitrackPose[P4] = _nh.subscribe<geometry_msgs::PoseStamped>("/optitrack/p4/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,P4),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[ROBOT_BASIS_RIGHT] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/right_robot/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,ROBOT_BASIS_RIGHT),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[ROBOT_BASIS_LEFT] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/left_robot/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,ROBOT_BASIS_LEFT),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[P1] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/p1/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,P1),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[P2] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/p2/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,P2),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[P3] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/p3/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,P3),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPose[P4] = _nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/p4/pose", 1, boost::bind(&ObjectGrasping::updateOptitrackPose,this,_1,P4),ros::VoidPtr(),ros::TransportHints().reliable().tcpNoDelay());
 
   // Publisher definitions
   _pubDesiredTwist[RIGHT] = _nh.advertise<geometry_msgs::Twist>("/lwr/joint_controllers/passive_ds_command_vel", 1);
@@ -211,13 +212,13 @@ bool ObjectGrasping::init()
 
   ROS_INFO("[ObjectGrasping]: Adapt normal modulation: %d", (int)_adaptNormalModulation);
 
-  if(!_nh.getParamCached("/lwr/ds_param/damping_eigval0",_d1[RIGHT]))
+  if(!_nh.getParamCached("/lwr/joint_controllers/ds_param/damping_eigval0",_d1[RIGHT]))
   {
     ROS_ERROR("[ObjectGrasping]: Cannot read first eigen value of passive ds controller for right robot");
     return false;
   }
 
-  if(!_nh.getParamCached("/lwr2/ds_param/damping_eigval0",_d1[LEFT]))
+  if(!_nh.getParamCached("/lwr2/joint_controllers/ds_param/damping_eigval0",_d1[LEFT]))
   {
     ROS_ERROR("[ObjectGrasping]: Cannot read first eigen value of passive ds controller for left robot");
     return false;
@@ -253,11 +254,22 @@ void ObjectGrasping::run()
        _firstOptitrackPose[ROBOT_BASIS_RIGHT] && _firstOptitrackPose[ROBOT_BASIS_LEFT] && _firstOptitrackPose[P1] &&
        _firstOptitrackPose[P2] && _firstOptitrackPose[P3] && _firstOptitrackPose[P4])
     {
-      _mutex.lock();
+      // _mutex.lock();
 
       // Check for update of passive ds controller eigen value
-      ros::param::getCached("/lwr/ds_param/damping_eigval0",_d1[RIGHT]);
-      ros::param::getCached("/lwr2/ds_param/damping_eigval0",_d1[LEFT]);
+      ros::param::getCached("/lwr/joint_controllers/ds_param/damping_eigval0",_d1[RIGHT]);
+
+      if(_d1[RIGHT]<FLT_EPSILON)
+      {
+        _d1[RIGHT] = 150.0f;
+      }
+
+      ros::param::getCached("/lwr2/joint_controllers/ds_param/damping_eigval0",_d1[LEFT]);
+
+      if(_d1[LEFT]<FLT_EPSILON)
+      {
+        _d1[LEFT] = 150.0f;
+      }
 
       // Initialize optitrack
       if(!_optitrackOK)
@@ -286,14 +298,20 @@ void ObjectGrasping::run()
         logData();
       }
 
-      _mutex.unlock();
+      // _mutex.unlock();
 
     }
+    else
+    {
+       std::cerr << _firstRobotPose[RIGHT] << _firstRobotPose[LEFT] << _firstRobotTwist[RIGHT] << _firstRobotTwist[LEFT] <<
+         _wrenchBiasOK[RIGHT] << _wrenchBiasOK[LEFT] << _firstDampingMatrix[RIGHT] << _firstDampingMatrix[LEFT] <<
+         _firstOptitrackPose[ROBOT_BASIS_RIGHT] << _firstOptitrackPose[ROBOT_BASIS_LEFT] << _firstOptitrackPose[P1] <<
+         _firstOptitrackPose[P2] << _firstOptitrackPose[P3] << _firstOptitrackPose[P4] << std::endl;
 
+    }
     ros::spinOnce();
     _loopRate.sleep();
   }
-
   // Send zero command
   for(int k = 0; k < NB_ROBOTS; k++)
   {
@@ -420,6 +438,13 @@ void ObjectGrasping::isObjectReachable()
     _objectReachable = false;
   }
 
+  if(_objectReachable==false && _xoC.norm()<0.8f && (_xoC-_leftRobotOrigin).norm()<0.8f)
+  { 
+    _objectReachable = true;
+  }
+  std::cerr << (_xoC).norm() << std::endl;
+  std::cerr << (_xoC-_leftRobotOrigin).norm() << std::endl;
+
   std::cerr << "[ObjectGrasping]: Reachable: " << (int) _objectReachable << " left: " << (int) l << " right: " << (int) r << " object: " << _markersTracked.segment(NB_ROBOTS,NB_TRACKED_OBJECTS-NB_ROBOTS).sum() << std::endl;
 }
 
@@ -508,7 +533,9 @@ void ObjectGrasping::computeNominalDS()
     if(_mode == REACHING_GRASPING_MANIPULATING)
     {
       _xdD << 0.0f,-1.0f,0.0f;
-      _xdD *= 0.20f;
+      _xdD *= 0.2f;
+      // _xdD = _xoD; 
+
     }
     else
     {
@@ -547,20 +574,24 @@ void ObjectGrasping::computeNominalDS()
   if(_mode == REACHING_GRASPING)
   {
     _vdC = 4.0f*(_xdC-_xC);
+    // _vdC = 15.0f*(_xdC-_xC);
   }
   else if(_mode == REACHING_GRASPING_MANIPULATING)
   {
     if(_contactState==CONTACT)
     {
       _vdC = (_objectAttractor+_offset-_xC);
+      // _vdC = 5.0f*(_objectAttractor+_offset-_xC);
     }
     else
     {
       _vdC = 4.0f*(_xdC-_xC);
+      // _vdC = 20.0f*(_xdC-_xC);
     }
   }
 
   _vdD = 2.0f*(_xdD-_xD);
+  // _vdD = 5.0f*(_xdD-_xD);
 
   // Compute robots' nominal DS 
   _fxc[RIGHT] = _vdD/2.0f;
@@ -752,7 +783,8 @@ void ObjectGrasping::computeModulatedDS()
     // Compute modulated DS
     _vd[k] = _fxp[k]+_fxnp[k]+_vdC;
 
-    // Bound modulated DS for safety 
+    // Bound modulated DS for safety
+    // _velocityLimit = 0.8f; 
     if(_vd[k].norm()>_velocityLimit)
     {
       _vd[k] *= _velocityLimit/_vd[k].norm();
